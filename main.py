@@ -5,23 +5,18 @@ from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 from selenium import webdriver
 from openpyxl import Workbook
-from openpyxl.drawing.image import Image
 import re
 
 class AdParser:
-    def __init__(self, min_price, max_price, geckodriver_path, banned_keywords, image_folder="images"):
+    def __init__(self, min_price, max_price, geckodriver_path):
         self.options = Options()
         self.options.add_argument("--headless")
         self.service = Service(geckodriver_path)
         self.driver = webdriver.Firefox(service=self.service, options=self.options)
         
-        self.image_folder = image_folder
-        os.makedirs(self.image_folder, exist_ok=True)
-        
         self.seen_links = set()
         self.min_price = min_price
         self.max_price = max_price
-        self.banned_keywords = banned_keywords
         self.block_ads_script = """
             var adSelectors = [
                 'iframe[src*="amazon-adsystem.com"]',
@@ -59,19 +54,6 @@ class AdParser:
         except:
             return None
 
-    def download_image(self, url, title):
-        """Завантаження зображення"""
-        try:
-            safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
-            filename = os.path.join(self.image_folder, f"{safe_title}.jpg")
-            img_data = requests.get(url, timeout=5).content
-            with open(filename, "wb") as img_file:
-                img_file.write(img_data)
-            return filename
-        except Exception as e:
-            print(f"Failed to download image {url}: {e}")
-            return None
-
     def is_advertisement(self, title):
         """
         Функція для перевірки, чи є оголошення рекламним
@@ -87,32 +69,30 @@ class AdParser:
     def parse_listings(self):
         ads = self.driver.find_elements(By.CLASS_NAME, "EntityList-item")
         listings = []
-        ad_counter = 0  # Лічильник оголошень
+        ad_counter = 0  
 
-        # Якщо не знайдено жодного оголошення на поточній сторінці, припиняємо збір даних
         if not ads:
+            print("No ads found.")
             return listings, ad_counter
 
         for ad in ads:
-            title = self.get_element_text(ad, By.CLASS_NAME, "entity-title")
+            title = self.get_element_text(ad, By.CLASS_NAME, "title")  # Додаємо заголовок
             price = self.get_element_text(ad, By.CLASS_NAME, "price")
             link = self.get_element_attr(ad, By.TAG_NAME, "a", "href")
-            img_url = self.get_element_attr(ad, By.TAG_NAME, "img", "src")
 
-            if not title or not link or link in self.seen_links or self.is_advertisement(title):  # Перевірка на рекламу
+            if not link or not link.startswith("https://www.njuskalo.hr/nekretnine/") or link in self.seen_links:
                 continue
 
             self.seen_links.add(link)
-            img_filename = self.download_image(img_url, title) if img_url else None
 
             listings.append({
-                "title": title,
+                "title": title or "No title",  # Додаємо title у словник
                 "price": price,
                 "link": link,
-                "image": img_filename
+                "image": "No image"  # Можна залишити поле для зображення, якщо потрібно
             })
 
-            ad_counter += 1  # Інкрементуємо лічильник кожного разу, коли додається нове оголошення
+            ad_counter += 1  
 
         return listings, ad_counter
 
@@ -140,25 +120,16 @@ class AdParser:
     def save_to_excel(self, data, excel_file="njuskalo_listings.xlsx"):
         """Збереження результатів у Excel"""
         wb = Workbook()
-        wb.remove(wb.active)  # Видаляємо стандартний аркуш
+        ws = wb.active
+        ws.title = "Listings"
+        
+        ws.append(["Title", "Price", "Link", "Image"])  
 
         for item in data:
-            title = item["title"][:30]  # Назва аркуша має обмеження по довжині
-            sheet_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)
-
-            ws = wb.create_sheet(title=sheet_name)
-            ws.append(["Title", item["title"]])
-            ws.append(["Price", item["price"]])
-            ws.append(["Link", item["link"]])
-
-            # Додаємо фото
-            if item["image"] and os.path.exists(item["image"]):
-                img = Image(item["image"])
-                img.width, img.height = 200, 200  # Масштаб фото
-                ws.add_image(img, "A5")  # Вставляємо в комірку A5
+            ws.append([item["title"], item["price"], item["link"], item["image"]])
 
         wb.save(excel_file)
-        print(f"✅ Data saved in {excel_file} with individual sheets")
+        print(f"✅ Data saved in {excel_file}")
 
     def close_driver(self):
         """Закриття браузера"""
@@ -169,37 +140,8 @@ if __name__ == "__main__":
     min_price = 300
     max_price = 400
     geckodriver_path = "/usr/bin/geckodriver"
-    banned_keywords = [
-        # Техніка та електроніка  
-        "MOTOROLA", "SAMSUNG", "IPHONE", "XIAOMI", "PS4", "PS5", "XBOX", "TV", "LAPTOP", "PC", "COMPUTER",  
-        "TABLET", "MONITOR", "HEADPHONES", "AUDIO", "GADGET", "CAMERA", "DRONE", "SMARTWATCH", "PRINTER",  
 
-        # Автомобілі та запчастини  
-        "TDI", "GOLF", "BMW", "AUDI", "MERCEDES", "FORD", "OPEL", "VOLKSWAGEN", "ŠKODA", "CAR", "VEHICLE",  
-        "MOTOR", "ENGINE", "TURBO", "TRANSMISSION", "RIMS", "TIRES", "WHEELS", "OIL", "FUEL", "SUZUKI",
-        "YAMAHA", "HONDA",
-
-        # Побутові товари  
-        "FURNITURE", "COUCH", "SOFA", "TABLE", "CHAIR", "WARDROBE", "BED", "MATTRESS", "KITCHEN",  
-        "WASHING MACHINE", "FRIDGE", "MICROWAVE", "STOVE", "OVEN", "DISHWASHER",  
-
-        # Мобільні тарифи та послуги  
-        "PREPAID", "SIM CARD", "MOBILE PLAN", "INTERNET", "SUBSCRIPTION", "SERVICE", "PACKAGE",  
-
-        # Знижки, акції, промо  
-        "RATE", "NEO", "256GB", "NOVO", "NEW", "SALE", "DISCOUNT", "PROMO", "OFFER", "BLACK FRIDAY",  
-        "CYBER MONDAY", "CLEARANCE", "SPECIAL PRICE", "ACTION", "BUNDLE", "FREE SHIPPING",  
-
-        # Валюта, гроші, кредит  
-        "EURO", "DOLLAR", "KUNA", "CREDIT", "LOAN", "FINANCE", "MONEY", "PAYMENT", "INSTALLMENT",  
-
-        # Інші нецільові категорії  
-        "MATRIX", "TICKET", "CONCERT", "EVENT", "VOUCHER", "GIFT CARD", "TOY", "BIKE", "SCOOTER",  
-        "ELECTRIC SCOOTER", "GYM MEMBERSHIP", "TRAVEL", "VACATION", "HOTEL", "RESORT", "TENT", "CAMPING",
-        "RALPH", "LAUREN", "PROROK"
-    ]
-
-    parser = AdParser(min_price, max_price, geckodriver_path, banned_keywords)
+    parser = AdParser(min_price, max_price, geckodriver_path)
 
     # Запускаємо процес парсингу
     parser.start_driver()
