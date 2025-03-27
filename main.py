@@ -87,10 +87,11 @@ class AdParser:
     def parse_listings(self):
         ads = self.driver.find_elements(By.CLASS_NAME, "EntityList-item")
         listings = []
+        ad_counter = 0  # Лічильник оголошень
 
         # Якщо не знайдено жодного оголошення на поточній сторінці, припиняємо збір даних
         if not ads:
-            return listings
+            return listings, ad_counter
 
         for ad in ads:
             title = self.get_element_text(ad, By.CLASS_NAME, "entity-title")
@@ -111,26 +112,30 @@ class AdParser:
                 "image": img_filename
             })
 
-        return listings
+            ad_counter += 1  # Інкрементуємо лічильник кожного разу, коли додається нове оголошення
 
+        return listings, ad_counter
 
     def collect_data(self, pages=10):
         all_data = []
+        total_ads = 0  # Лічильник загальної кількості оголошень
+
         for page in range(1, pages + 1):
             url = f"https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]={self.max_price}&page={page}"
             self.driver.get(url)
 
-            data = self.parse_listings()
+            data, ad_count = self.parse_listings()
 
             if not data:
                 print(f"🚫 No listings found on page {page}. Moving to the next page.")
                 continue  # Перехід до наступної сторінки, навіть якщо поточна порожня
 
             all_data.extend(data)
-            print(f"✅ Data collected from page {page}")
-        
-        return all_data
+            total_ads += ad_count  # Додаємо до загальної кількості оголошень
 
+            print(f"✅ Data collected from page {page}")
+
+        return all_data, total_ads
 
     def save_to_excel(self, data, excel_file="njuskalo_listings.xlsx"):
         """Збереження результатів у Excel"""
@@ -165,14 +170,42 @@ if __name__ == "__main__":
     max_price = 400
     geckodriver_path = "/usr/bin/geckodriver"
     banned_keywords = [
-        "MOTOROLA EDGE", "RATE", "NEO", "256GB", "NOVO", "NEW", "SALE", "DISCOUNT", "PROMO", "OFFER", "Matrix"
+        # Техніка та електроніка  
+        "MOTOROLA", "SAMSUNG", "IPHONE", "XIAOMI", "PS4", "PS5", "XBOX", "TV", "LAPTOP", "PC", "COMPUTER",  
+        "TABLET", "MONITOR", "HEADPHONES", "AUDIO", "GADGET", "CAMERA", "DRONE", "SMARTWATCH", "PRINTER",  
+
+        # Автомобілі та запчастини  
+        "TDI", "GOLF", "BMW", "AUDI", "MERCEDES", "FORD", "OPEL", "VOLKSWAGEN", "ŠKODA", "CAR", "VEHICLE",  
+        "MOTOR", "ENGINE", "TURBO", "TRANSMISSION", "RIMS", "TIRES", "WHEELS", "OIL", "FUEL", "SUZUKI",
+        "YAMAHA", "HONDA",
+
+        # Побутові товари  
+        "FURNITURE", "COUCH", "SOFA", "TABLE", "CHAIR", "WARDROBE", "BED", "MATTRESS", "KITCHEN",  
+        "WASHING MACHINE", "FRIDGE", "MICROWAVE", "STOVE", "OVEN", "DISHWASHER",  
+
+        # Мобільні тарифи та послуги  
+        "PREPAID", "SIM CARD", "MOBILE PLAN", "INTERNET", "SUBSCRIPTION", "SERVICE", "PACKAGE",  
+
+        # Знижки, акції, промо  
+        "RATE", "NEO", "256GB", "NOVO", "NEW", "SALE", "DISCOUNT", "PROMO", "OFFER", "BLACK FRIDAY",  
+        "CYBER MONDAY", "CLEARANCE", "SPECIAL PRICE", "ACTION", "BUNDLE", "FREE SHIPPING",  
+
+        # Валюта, гроші, кредит  
+        "EURO", "DOLLAR", "KUNA", "CREDIT", "LOAN", "FINANCE", "MONEY", "PAYMENT", "INSTALLMENT",  
+
+        # Інші нецільові категорії  
+        "MATRIX", "TICKET", "CONCERT", "EVENT", "VOUCHER", "GIFT CARD", "TOY", "BIKE", "SCOOTER",  
+        "ELECTRIC SCOOTER", "GYM MEMBERSHIP", "TRAVEL", "VACATION", "HOTEL", "RESORT", "TENT", "CAMPING",
+        "RALPH", "LAUREN", "PROROK"
     ]
 
     parser = AdParser(min_price, max_price, geckodriver_path, banned_keywords)
 
     # Запускаємо процес парсингу
     parser.start_driver()
-    all_data = parser.collect_data(pages=10)
+    all_data, total_ads = parser.collect_data(pages=5)
+
+    print(f"✅ Total ads collected: {total_ads}")
 
     # Зберігаємо результати в Excel
     parser.save_to_excel(all_data)
