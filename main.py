@@ -1,4 +1,5 @@
 import pandas as pd
+import requests
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
@@ -9,6 +10,8 @@ options.add_argument("--headless")
 service = Service("/usr/bin/geckodriver")
 driver = webdriver.Firefox(service=service, options=options)
 
+excluded_word = ""
+seen_links = set()
 
 def get_element_text(ad, by, value):
     try:
@@ -16,41 +19,57 @@ def get_element_text(ad, by, value):
     except:
         return None
 
-
 def get_element_attr(ad, by, value, attr):
-    """Finds an element and returns its attribute if present, otherwise None."""
     try:
         return ad.find_element(by, value).get_attribute(attr)
     except:
         return None
 
+def download_image(url, filename):
+    try:
+        img_data = requests.get(url, timeout=5).content
+        with open(filename, "wb") as img_file:
+            img_file.write(img_data)
+        return filename
+    except:
+        return None
 
 def parse_listings(driver):
     ads = driver.find_elements(By.CLASS_NAME, "EntityList-item")
     listings = []
 
     for ad in ads:
-        listing = {
-            "title": get_element_text(ad, By.CLASS_NAME, "entity-title"),
-            "price": get_element_text(ad, By.CLASS_NAME, "price"),
-            "location": get_element_text(ad, By.CLASS_NAME, "location"),
-            "link": get_element_attr(ad, By.TAG_NAME, "a", "href")
-        }
-        listings.append(listing)
+        title = get_element_text(ad, By.CLASS_NAME, "entity-title")
+        price = get_element_text(ad, By.CLASS_NAME, "price")
+        link = get_element_attr(ad, By.TAG_NAME, "a", "href")
+        img_url = get_element_attr(ad, By.TAG_NAME, "img", "src")
+
+        if not title or not link or link in seen_links:
+            continue  # Пропускаємо дублі
+
+        seen_links.add(link)
+
+        img_filename = f"images/{title.replace(' ', '_')}.jpg" if img_url else None
+        if img_url:
+            download_image(img_url, img_filename)
+
+        listings.append({
+            "title": title,
+            "price": price,
+            "link": link,
+            "image": img_filename
+        })
 
     return listings
 
-
-price = 450
-page = 1
+price = 200
 all_data = []
 
-for page in range(1, 10):  # Limit to avoid an infinite loop
-    url = f"https://www.njuskalo.hr/iznajmljivanje-stanova/zagreb?price%5Bmax%5D={price}&numberOfRooms%5Bmin%5D=studio-apartment&numberOfRooms%5Bmax%5D&resultsPerPage=25&page={page}"
+for page in range(1, 10):
+    url = f"https://www.njuskalo.hr/iznajmljivanje-stanova/zagreb?price[min]=150&price[max]={price}&resultsPerPage=25&page={page}"
     driver.get(url)
 
     data = parse_listings(driver)
-
     if not data:
         print("🚫 No more listings. Stopping.")
         break
@@ -58,24 +77,8 @@ for page in range(1, 10):  # Limit to avoid an infinite loop
     all_data.extend(data)
     print(f"✅ Data collected from page {page}")
 
-else:
-    print("⚠️ Maximum number of pages reached.")
-
 driver.quit()
 
 df = pd.DataFrame(all_data)
-df.to_csv("njuskalo_listings.csv", index=False, encoding="utf-8")
-print("✅ All data saved in njuskalo_listings.csv")
-
-df = df.dropna(subset=["title", "price", "link"], how="any")
-df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
-
-formatted_list = [
-    f"{row['title']}, {row['price']}, {row['link']}"
-    for i, row in df.iterrows()
-]
-
-with open("cleaned_listings.txt", "w", encoding="utf-8") as f:
-    f.write("\n\n".join(formatted_list))
-
-print("✅ Data cleaned and saved in cleaned_listings.txt")
+df.to_excel("njuskalo_listings.xlsx", index=False)
+print("✅ Data saved in njuskalo_listings.xlsx")
