@@ -8,7 +8,7 @@ from openpyxl import Workbook
 import re
 
 class AdParser:
-    def __init__(self, min_price, max_price, geckodriver_path):
+    def __init__(self, min_price, max_price, max_square, geckodriver_path):
         self.options = Options()
         self.options.add_argument("--headless")
         self.service = Service(geckodriver_path)
@@ -17,6 +17,7 @@ class AdParser:
         self.seen_links = set()
         self.min_price = min_price
         self.max_price = max_price
+        self.max_square = max_square
         self.block_ads_script = """
             var adSelectors = [
                 'iframe[src*="amazon-adsystem.com"]',
@@ -86,7 +87,7 @@ class AdParser:
         total_ads = 0  # Лічильник загальної кількості оголошень
 
         for page in range(1, pages + 1):
-            url = f"https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]={self.max_price}&page={page}"
+            url = f"https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]={self.max_price}&page={page}&livingArea[max]={self.max_square}"
             self.driver.get(url)
 
             data, ad_count = self.parse_listings()
@@ -121,11 +122,10 @@ class AdParser:
 
 
 if __name__ == "__main__":
-    min_price = 300
-    max_price = 400
+    min_price, max_price, max_square = 300, 400, 50
     geckodriver_path = "/usr/bin/geckodriver"
 
-    parser = AdParser(min_price, max_price, geckodriver_path)
+    parser = AdParser(min_price, max_price, max_square, geckodriver_path)
 
     # Запускаємо процес парсингу
     parser.start_driver()
