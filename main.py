@@ -54,18 +54,6 @@ class AdParser:
         except:
             return None
 
-    def is_advertisement(self, title):
-        """
-        Функція для перевірки, чи є оголошення рекламним
-        :param title: Назва оголошення
-        :return: True, якщо оголошення рекламне, False в іншому випадку
-        """
-        title = title.upper()  # Перетворюємо на великий регістр для зручності порівняння
-        for keyword in self.banned_keywords:
-            if re.search(r'\b' + re.escape(keyword) + r'\b', title):  # Перевірка на наявність ключового слова
-                return True
-        return False
-
     def parse_listings(self):
         ads = self.driver.find_elements(By.CLASS_NAME, "EntityList-item")
         listings = []
@@ -76,7 +64,6 @@ class AdParser:
             return listings, ad_counter
 
         for ad in ads:
-            title = self.get_element_text(ad, By.CLASS_NAME, "title")  # Додаємо заголовок
             price = self.get_element_text(ad, By.CLASS_NAME, "price")
             link = self.get_element_attr(ad, By.TAG_NAME, "a", "href")
 
@@ -86,10 +73,8 @@ class AdParser:
             self.seen_links.add(link)
 
             listings.append({
-                "title": title or "No title",  # Додаємо title у словник
                 "price": price,
                 "link": link,
-                "image": "No image"  # Можна залишити поле для зображення, якщо потрібно
             })
 
             ad_counter += 1  
@@ -121,12 +106,11 @@ class AdParser:
         """Збереження результатів у Excel"""
         wb = Workbook()
         ws = wb.active
-        ws.title = "Listings"
         
-        ws.append(["Title", "Price", "Link", "Image"])  
+        ws.append(["Price", "Link"])  
 
         for item in data:
-            ws.append([item["title"], item["price"], item["link"], item["image"]])
+            ws.append([item["price"], item["link"]])
 
         wb.save(excel_file)
         print(f"✅ Data saved in {excel_file}")
