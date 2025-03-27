@@ -6,9 +6,10 @@ from selenium.webdriver.firefox.options import Options
 from selenium import webdriver
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image
+import re
 
 class AdParser:
-    def __init__(self, min_price, max_price, geckodriver_path, image_folder="images"):
+    def __init__(self, min_price, max_price, geckodriver_path, banned_keywords, image_folder="images"):
         self.options = Options()
         self.options.add_argument("--headless")
         self.service = Service(geckodriver_path)
@@ -20,6 +21,7 @@ class AdParser:
         self.seen_links = set()
         self.min_price = min_price
         self.max_price = max_price
+        self.banned_keywords = banned_keywords
         self.block_ads_script = """
             var adSelectors = [
                 'iframe[src*="amazon-adsystem.com"]',
@@ -70,29 +72,37 @@ class AdParser:
             print(f"Failed to download image {url}: {e}")
             return None
 
+    def is_advertisement(self, title):
+        """
+        Функція для перевірки, чи є оголошення рекламним
+        :param title: Назва оголошення
+        :return: True, якщо оголошення рекламне, False в іншому випадку
+        """
+        title = title.upper()  # Перетворюємо на великий регістр для зручності порівняння
+        for keyword in self.banned_keywords:
+            if re.search(r'\b' + re.escape(keyword) + r'\b', title):  # Перевірка на наявність ключового слова
+                return True
+        return False
+
     def parse_listings(self):
-        """Парсинг оголошень зі сторінки"""
         ads = self.driver.find_elements(By.CLASS_NAME, "EntityList-item")
         listings = []
+
+        # Якщо не знайдено жодного оголошення на поточній сторінці, припиняємо збір даних
+        if not ads:
+            return listings
 
         for ad in ads:
             title = self.get_element_text(ad, By.CLASS_NAME, "entity-title")
             price = self.get_element_text(ad, By.CLASS_NAME, "price")
             link = self.get_element_attr(ad, By.TAG_NAME, "a", "href")
-            
-            # Перевірка, чи є основне зображення
-            img_url = self.get_element_attr(ad, By.XPATH, ".//img[contains(@class, 'main-image') or contains(@class, 'primary-image')]", "src")
-            if not img_url:
-                img_url = self.get_element_attr(ad, By.TAG_NAME, "img", "src")
+            img_url = self.get_element_attr(ad, By.TAG_NAME, "img", "src")
 
-            if not title or not link or link in self.seen_links:
+            if not title or not link or link in self.seen_links or self.is_advertisement(title):  # Перевірка на рекламу
                 continue
 
             self.seen_links.add(link)
-            img_filename = None
-
-            if img_url:
-                img_filename = self.download_image(img_url, title)
+            img_filename = self.download_image(img_url, title) if img_url else None
 
             listings.append({
                 "title": title,
@@ -103,22 +113,24 @@ class AdParser:
 
         return listings
 
+
     def collect_data(self, pages=10):
         all_data = []
         for page in range(1, pages + 1):
-            url = "https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]=400"
+            url = f"https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]={self.max_price}&page={page}"
             self.driver.get(url)
 
             data = self.parse_listings()
 
             if not data:
-                print("🚫 No more listings. Stopping.")
-                break
+                print(f"🚫 No listings found on page {page}. Moving to the next page.")
+                continue  # Перехід до наступної сторінки, навіть якщо поточна порожня
 
             all_data.extend(data)
             print(f"✅ Data collected from page {page}")
         
         return all_data
+
 
     def save_to_excel(self, data, excel_file="njuskalo_listings.xlsx"):
         """Збереження результатів у Excel"""
@@ -152,8 +164,11 @@ if __name__ == "__main__":
     min_price = 300
     max_price = 400
     geckodriver_path = "/usr/bin/geckodriver"
+    banned_keywords = [
+        "MOTOROLA EDGE", "RATE", "NEO", "256GB", "NOVO", "NEW", "SALE", "DISCOUNT", "PROMO", "OFFER", "Matrix"
+    ]
 
-    parser = AdParser(min_price, max_price, geckodriver_path)
+    parser = AdParser(min_price, max_price, geckodriver_path, banned_keywords)
 
     # Запускаємо процес парсингу
     parser.start_driver()
