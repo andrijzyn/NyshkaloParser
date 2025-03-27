@@ -15,6 +15,30 @@ options.add_argument("--headless")
 service = Service("/usr/bin/geckodriver")
 driver = webdriver.Firefox(service=service, options=options)
 
+# Додаємо JavaScript для блокування реклами
+block_ads_script = """
+    var adSelectors = [
+        'iframe[src*="amazon-adsystem.com"]',
+        'iframe[src*="googlesyndication.com"]',
+        'iframe[src*="googletagmanager.com"]',
+        'iframe[src*="midas-network.com"]',
+        'iframe[src*="privacy-center.org"]',
+        'img[src*="defractal.com"]',
+        'div[class*="ad"]',
+        'script[src*="dotmetrics.net"]'
+    ];
+
+    adSelectors.forEach(function(selector) {
+        var ads = document.querySelectorAll(selector);
+        ads.forEach(function(ad) {
+            ad.remove();
+        });
+    });
+"""
+
+# Запуск JS скрипту для блокування реклами на сторінці
+driver.execute_script(block_ads_script)
+
 # Папка для збереження фото
 image_folder = "images"
 os.makedirs(image_folder, exist_ok=True)
