@@ -143,24 +143,29 @@ class AdParser:
             return set()
 
     def save_to_excel(self, data):
-        date_str = datetime.now().strftime("%d %B_%H-%M")
-        filename = f"njuskalo_listings {date_str}.xlsx"
-        file_path = os.path.join(self.save_dir, filename)
-        
-        previous_links = self.load_previous_data()
-        unique_data = [item for item in data if item["link"] not in previous_links]
-        
-        if not unique_data:
-            print("✅ No new unique listings found.")
+        """Збереження відсортованих результатів у Excel"""
+        if not data:
+            print("ℹ️ No data to save.")
             return
-        
+
+        date_str = datetime.now().strftime("%d %B %H-%M")
+        folder = "data"
+        os.makedirs(folder, exist_ok=True)
+        excel_file = os.path.join(folder, f"njuskalo_listings {date_str}.xlsx")
+
+        def extract_price(item):
+            match = re.search(r"\d+", item["price"].replace(".", "").replace(",", ""))
+            return int(match.group()) if match else float("inf")
+
+        data.sort(key=extract_price)
+
         wb = Workbook()
         ws = wb.active
         ws.append(["Price", "Link"])
-        
-        for item in unique_data:
+
+        for item in data:
             ws.append([item["price"], item["link"]])
-        
+
         wb.save(file_path)
         print(f"✅ Data saved in {file_path}")
 
@@ -168,7 +173,7 @@ class AdParser:
         self.driver.quit()
 
 if __name__ == "__main__":
-    min_price, max_price, max_square = 300, 400, 45
+    min_price, max_price, max_square = 250, 400, 45
     geckodriver_path = "/usr/bin/geckodriver"
     
     parser = AdParser(min_price, max_price, max_square, geckodriver_path)
