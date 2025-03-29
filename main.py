@@ -6,6 +6,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium import webdriver
 from openpyxl import Workbook
 import re
+from datetime import datetime
 
 class AdParser:
     def __init__(self, min_price, max_price, max_square, geckodriver_path):
@@ -103,8 +104,11 @@ class AdParser:
 
         return all_data, total_ads
 
-    def save_to_excel(self, data, excel_file="njuskalo_listings.xlsx"):
+    def save_to_excel(self, data):
         """Збереження результатів у Excel"""
+        date_str = datetime.now().strftime("%d %B")  # Форматування дати (30 March)
+        excel_file = f"njuskalo_listings_{date_str}.xlsx"
+        
         wb = Workbook()
         ws = wb.active
         
@@ -122,7 +126,7 @@ class AdParser:
 
 
 if __name__ == "__main__":
-    min_price, max_price, max_square = 300, 400, 50
+    min_price, max_price, max_square = 300, 400, 45
     geckodriver_path = "/usr/bin/geckodriver"
 
     parser = AdParser(min_price, max_price, max_square, geckodriver_path)
