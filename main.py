@@ -11,18 +11,18 @@ from openpyxl import Workbook, load_workbook
 
 class AdParser:
     """Class to parse ads from a website and save them to an Excel file."""
-    
-    def __init__(self, config):
+
+    def __init__(self, parser_config):
         """Initialize the AdParser with configuration settings."""
         self.options = Options()
         self.options.add_argument("--headless")
-        self.service = Service(config['geckodriver_path'])
+        self.service = Service('/usr/bin/geckodriver')
         self.driver = webdriver.Firefox(service=self.service, options=self.options)
         self.seen_links = set()
-        self.min_price = config['min_price']
-        self.max_price = config['max_price']
-        self.max_square = config['max_square']
-        self.save_dir = config['save_dir']
+        self.min_price = parser_config['min_price']
+        self.max_price = parser_config['max_price']
+        self.max_square = parser_config['max_square']
+        self.save_dir = 'data'
         os.makedirs(self.save_dir, exist_ok=True)
 
     def start_driver(self):
@@ -51,7 +51,7 @@ class AdParser:
         """Get the text of an element."""
         try:
             return ad.find_element(by, value).text.strip()
-        except Exception as e:
+        except: #  Exception as e
             # print(f"Error getting text: {e}")
             return None
 
@@ -59,7 +59,7 @@ class AdParser:
         """Get an attribute of an element."""
         try:
             return ad.find_element(by, value).get_attribute(attr)
-        except Exception as e:
+        except: #  Exception as e
             # print(f"Error getting attribute: {e}")
             return None
 
@@ -69,8 +69,8 @@ class AdParser:
             return WebDriverWait(self.driver, timeout).until(
                 EC.presence_of_element_located((by, value))
             )
-        except Exception as e:
-            print(f"Error waiting for element: {e}")
+        except: #  Exception as e
+            # print(f"Error getting attribute: {e}")
             return None
 
     def parse_listings(self):
@@ -80,9 +80,7 @@ class AdParser:
         if not ads:
             return listings, 0
         for ad in ads:
-            price = self.get_element_text(ad, By.CLASS_NAME, "ClassifiedDetailSummary-priceDomestic")
-            if not price:
-                price = self.get_element_text(ad, By.CLASS_NAME, "price")  # fallback to other class
+            price = self.get_element_text(ad, By.CLASS_NAME, "price")
             link = self.get_element_attr(ad, By.TAG_NAME, "a", "href")
             if not link or not link.startswith("https://www.njuskalo.hr/nekretnine/") or link in self.seen_links:
                 continue
@@ -179,13 +177,11 @@ if __name__ == "__main__":
     config = {
         'min_price': 250, 
         'max_price': 400, 
-        'max_square': 45, 
-        'geckodriver_path': "/usr/bin/geckodriver", 
-        'save_dir': "data"
+        'max_square': 45
     }
     parser = AdParser(config)
     parser.start_driver()
-    all_data, total_ads = parser.collect_data(100)
-    print(f"✅ Total ads collected: {total_ads}")
-    parser.save_to_excel(all_data)
+    collected_data, count_ads = parser.collect_data(100)
+    print(f"✅ Total ads collected: {count_ads}")
+    parser.save_to_excel(collected_data)
     parser.close_driver()
