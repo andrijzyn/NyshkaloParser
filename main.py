@@ -4,12 +4,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 from selenium import webdriver
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 import re
 from datetime import datetime
 
 class AdParser:
-    def __init__(self, min_price, max_price, max_square, geckodriver_path):
+    def __init__(self, min_price, max_price, max_square, geckodriver_path, save_dir="data"):
         self.options = Options()
         self.options.add_argument("--headless")
         self.service = Service(geckodriver_path)
@@ -19,6 +19,9 @@ class AdParser:
         self.min_price = min_price
         self.max_price = max_price
         self.max_square = max_square
+        self.save_dir = save_dir
+        os.makedirs(self.save_dir, exist_ok=True)
+        
         self.block_ads_script = """
             var adSelectors = [
                 'iframe[src*="amazon-adsystem.com"]',
@@ -30,7 +33,6 @@ class AdParser:
                 'div[class*="ad"]',
                 'script[src*="dotmetrics.net"]'
             ];
-
             adSelectors.forEach(function(selector) {
                 var ads = document.querySelectorAll(selector);
                 ads.forEach(function(ad) {
@@ -40,7 +42,6 @@ class AdParser:
         """
     
     def start_driver(self):
-        """Запуск браузера та блокування реклами"""
         self.driver.get("https://www.njuskalo.hr")
         self.driver.execute_script(self.block_ads_script)
 
@@ -62,7 +63,6 @@ class AdParser:
         ad_counter = 0  
 
         if not ads:
-            print("No ads found.")
             return listings, ad_counter
 
         for ad in ads:
@@ -73,19 +73,17 @@ class AdParser:
                 continue
 
             self.seen_links.add(link)
-
-            listings.append({
-                "price": price,
-                "link": link,
-            })
-
+            listings.append({"price": price, "link": link})
             ad_counter += 1  
 
         return listings, ad_counter
 
     def collect_data(self, pages=10):
         all_data = []
-        total_ads = 0  # Лічильник загальної кількості оголошень
+        total_ads = 0
+        empty_pages = 0
+
+        previous_links = self.load_previous_data()  # Отримуємо посилання з попереднього запуску
 
         for page in range(1, pages + 1):
             url = f"https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]={self.max_price}&page={page}&livingArea[max]={self.max_square}"
@@ -94,51 +92,75 @@ class AdParser:
             data, ad_count = self.parse_listings()
 
             if not data:
-                print(f"🚫 No listings found on page {page}. Moving to the next page.")
-                continue  # Перехід до наступної сторінки, навіть якщо поточна порожня
+                empty_pages += 1
+                if empty_pages >= 2:
+                    break
+                continue
 
-            all_data.extend(data)
-            total_ads += ad_count  # Додаємо до загальної кількості оголошень
+            # Фільтруємо тільки унікальні оголошення
+            unique_data = [ad for ad in data if ad["link"] not in previous_links]
+            unique_count = len(unique_data)
 
-            print(f"✅ Data collected from page {page}")
+            all_data.extend(unique_data)
+            print(f"✅ Page {page}: {unique_count} unique listings found")
+
+            total_ads += unique_count
+            empty_pages = 0
 
         return all_data, total_ads
 
+    def get_latest_file(self):
+        files = [f for f in os.listdir(self.save_dir) if f.endswith(".xlsx")]
+        if not files:
+            return None
+        files.sort(key=lambda x: os.path.getmtime(os.path.join(self.save_dir, x)), reverse=True)
+        return os.path.join(self.save_dir, files[0])
+
+    def load_previous_data(self):
+        """Завантажує унікальні посилання з останнього збереженого файлу"""
+        last_file = self.get_latest_file()
+        if not last_file:
+            return set()
+        
+        wb = load_workbook(last_file)
+        ws = wb.active
+        
+        return {row[1] for row in ws.iter_rows(min_row=2, values_only=True) if row[1]}
+
     def save_to_excel(self, data):
-        """Збереження результатів у Excel"""
-        date_str = datetime.now().strftime("%d %B")  # Форматування дати (30 March)
-        excel_file = f"njuskalo_listings_{date_str}.xlsx"
+        date_str = datetime.now().strftime("%d %B_%H-%M")
+        filename = f"njuskalo_listings {date_str}.xlsx"
+        file_path = os.path.join(self.save_dir, filename)
+        
+        previous_links = self.load_previous_data()
+        unique_data = [item for item in data if item["link"] not in previous_links]
+        
+        if not unique_data:
+            print("✅ No new unique listings found.")
+            return
         
         wb = Workbook()
         ws = wb.active
+        ws.append(["Price", "Link"])
         
-        ws.append(["Price", "Link"])  
-
-        for item in data:
+        for item in unique_data:
             ws.append([item["price"], item["link"]])
-
-        wb.save(excel_file)
-        print(f"✅ Data saved in {excel_file}")
+        
+        wb.save(file_path)
+        print(f"✅ Data saved in {file_path}")
 
     def close_driver(self):
-        """Закриття браузера"""
         self.driver.quit()
-
 
 if __name__ == "__main__":
     min_price, max_price, max_square = 300, 400, 45
     geckodriver_path = "/usr/bin/geckodriver"
-
+    
     parser = AdParser(min_price, max_price, max_square, geckodriver_path)
-
-    # Запускаємо процес парсингу
+    
     parser.start_driver()
-    all_data, total_ads = parser.collect_data(pages=5)
-
+    all_data, total_ads = parser.collect_data()
     print(f"✅ Total ads collected: {total_ads}")
-
-    # Зберігаємо результати в Excel
+    
     parser.save_to_excel(all_data)
-
-    # Закриваємо браузер
     parser.close_driver()
