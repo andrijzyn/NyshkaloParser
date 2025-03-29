@@ -78,14 +78,14 @@ class AdParser:
 
         return listings, ad_counter
 
-    def collect_data(self, pages=10):
+    def collect_data(self, pages):
         all_data = []
         total_ads = 0
         empty_pages = 0
 
         previous_links = self.load_previous_data()  # Отримуємо посилання з попереднього запуску
 
-        for page in range(1, pages + 1):
+        for page in range(1, pages):
             url = f"https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]={self.max_price}&page={page}&livingArea[max]={self.max_square}"
             self.driver.get(url)
 
@@ -117,15 +117,30 @@ class AdParser:
         return os.path.join(self.save_dir, files[0])
 
     def load_previous_data(self):
-        """Завантажує унікальні посилання з останнього збереженого файлу"""
-        last_file = self.get_latest_file()
-        if not last_file:
+        """Завантажує посилання з останнього Excel-файлу"""
+        folder = "data"  # Папка з файлами
+        files = sorted(
+            [f for f in os.listdir(folder) if f.endswith(".xlsx")],
+            key=lambda f: os.path.getmtime(os.path.join(folder, f)),
+            reverse=True
+        )
+
+        if not files:
+            print("ℹ️ No previous data found.")
             return set()
-        
-        wb = load_workbook(last_file)
-        ws = wb.active
-        
-        return {row[1] for row in ws.iter_rows(min_row=2, values_only=True) if row[1]}
+
+        last_file = os.path.join(folder, files[0])
+
+        try:
+            wb = load_workbook(last_file, data_only=True)
+            ws = wb.active
+            previous_links = {row[1] for row in ws.iter_rows(min_row=2, values_only=True) if row[1]}
+            wb.close()
+            print(f"ℹ️ Loaded {len(previous_links)} previous listings from {last_file}")
+            return previous_links
+        except Exception as e:
+            print(f"⚠️ Failed to load previous data: {e}")
+            return set()
 
     def save_to_excel(self, data):
         date_str = datetime.now().strftime("%d %B_%H-%M")
@@ -159,7 +174,7 @@ if __name__ == "__main__":
     parser = AdParser(min_price, max_price, max_square, geckodriver_path)
     
     parser.start_driver()
-    all_data, total_ads = parser.collect_data()
+    all_data, total_ads = parser.collect_data(100)
     print(f"✅ Total ads collected: {total_ads}")
     
     parser.save_to_excel(all_data)
