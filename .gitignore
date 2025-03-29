@@ -1,7 +1,1 @@
-
-cleaned_listings.txt
-njuskalo_listings.csv
-/images
-.~njuskalo_listings.xlsx
-njuskalo_listings.xlsx
-cache.json
+*.xlsx
