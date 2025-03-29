@@ -71,6 +71,10 @@ class AdParser:
 
             if not link or not link.startswith("https://www.njuskalo.hr/nekretnine/") or link in self.seen_links:
                 continue
+            
+            # Перевірка на наявність "radnika" у лінку
+            if "radnika" in link.lower():
+                continue
 
             self.seen_links.add(link)
             listings.append({"price": price, "link": link})
@@ -78,9 +82,16 @@ class AdParser:
 
         return listings, ad_counter
 
+    def extract_price(self, price_str):
+        """Видаляє все зайве з ціни та повертає числове значення."""
+        if not price_str:
+            return None
+        match = re.search(r"\d+", price_str.replace(".", "").replace(",", ""))
+        return int(match.group()) if match else None
+
     def collect_data(self, pages):
         all_data = []
-        total_ads = 0
+        total_unique_ads = 0
         empty_pages = 0
 
         previous_links = self.load_previous_data()  # Отримуємо посилання з попереднього запуску
@@ -89,25 +100,36 @@ class AdParser:
             url = f"https://www.njuskalo.hr/iznajmljivanje-stanova?geo[locationIds]=1248%2C1249%2C1250%2C1251%2C1252%2C1253&price[max]={self.max_price}&page={page}&livingArea[max]={self.max_square}"
             self.driver.get(url)
 
-            data, ad_count = self.parse_listings()
+            data, _ = self.parse_listings()
 
-            if not data:
+            # Фільтрація оголошень за параметрами та перевірка унікальності
+            filtered_data = []
+            for item in data:
+                price = self.extract_price(item["price"])
+                link = item["link"]
+
+                # Перевірка на унікальність та фільтрація за ціною
+                if link in self.seen_links:
+                    continue
+
+                if price is None or not (self.min_price <= price <= self.max_price):
+                    continue
+
+                self.seen_links.add(link)
+                filtered_data.append(item)
+
+            if not filtered_data:
                 empty_pages += 1
                 if empty_pages >= 2:
                     break
                 continue
 
-            # Фільтруємо тільки унікальні оголошення
-            unique_data = [ad for ad in data if ad["link"] not in previous_links]
-            unique_count = len(unique_data)
-
-            all_data.extend(unique_data)
-            print(f"✅ Page {page}: {unique_count} unique listings found")
-
-            total_ads += unique_count
+            all_data.extend(filtered_data)
+            print(f"✅ Data collected from page {page}")
+            total_unique_ads += len(filtered_data)
             empty_pages = 0
 
-        return all_data, total_ads
+        return all_data, total_unique_ads
 
     def get_latest_file(self):
         files = [f for f in os.listdir(self.save_dir) if f.endswith(".xlsx")]
@@ -151,13 +173,9 @@ class AdParser:
         date_str = datetime.now().strftime("%d %B %H-%M")
         folder = "data"
         os.makedirs(folder, exist_ok=True)
-        excel_file = os.path.join(folder, f"njuskalo_listings {date_str}.xlsx")
+        file_path = os.path.join(folder, f"njuskalo_listings {date_str}.xlsx")
 
-        def extract_price(item):
-            match = re.search(r"\d+", item["price"].replace(".", "").replace(",", ""))
-            return int(match.group()) if match else float("inf")
-
-        data.sort(key=extract_price)
+        data.sort(key=lambda item: self.extract_price(item["price"]))
 
         wb = Workbook()
         ws = wb.active
@@ -180,7 +198,7 @@ if __name__ == "__main__":
     
     parser.start_driver()
     all_data, total_ads = parser.collect_data(100)
-    print(f"✅ Total ads collected: {total_ads}")
+    print(f"✅ Total unique ads collected: {total_ads}")
     
     parser.save_to_excel(all_data)
     parser.close_driver()
