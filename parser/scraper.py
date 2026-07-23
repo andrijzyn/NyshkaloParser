@@ -61,11 +61,13 @@ def collect_data(pages, retry=False):
             progress.update(task, description=f"[dim]Scraping page {page}...[/dim]")
             min_price = config["parser"]["min_price"]
             max_price = config["parser"]["max_price"]
+            min_square = config["parser"]["min_square"]
             max_square = config["parser"]["max_square"]
             url = (
                 f"https://www.njuskalo.hr/iznajmljivanje-stanova/zagreb?"
                 f"price[min]={min_price}&price[max]={max_price}"
-                f"&page={page}&livingArea[max]={max_square}"
+                f"&livingArea[min]={min_square}&livingArea[max]={max_square}"
+                f"&page={page}"
             )
             driver.get(url)
             data, _ = parse_listings(driver)
