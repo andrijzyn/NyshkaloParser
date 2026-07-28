@@ -1,4 +1,3 @@
-"""Excel storage helpers — load previous listings and save new ones."""
 import os
 import re
 from datetime import datetime
@@ -15,7 +14,6 @@ os.makedirs(save_dir, exist_ok=True)
 
 
 def get_latest_file():
-    """Get the latest Excel file from the save directory."""
     files = [f for f in os.listdir(save_dir) if f.endswith(".xlsx")]
     if not files:
         return None
@@ -24,7 +22,6 @@ def get_latest_file():
 
 
 def load_previous_data():
-    """Load link set from all saved Excel files for deduplication."""
     files = sorted(
         [f for f in os.listdir(save_dir) if f.endswith(".xlsx")],
         key=lambda f: os.path.getmtime(os.path.join(save_dir, f)),
@@ -55,7 +52,6 @@ def load_previous_data():
 
 
 def load_full_data():
-    """Load all listings (price + link) from all saved Excel files."""
     files = sorted(
         [f for f in os.listdir(save_dir) if f.endswith(".xlsx")],
         key=lambda f: os.path.getmtime(os.path.join(save_dir, f)),
@@ -81,7 +77,6 @@ def load_full_data():
 
 
 def clean_data():
-    """Delete all saved Excel files."""
     files = [f for f in os.listdir(save_dir) if f.endswith(".xlsx")]
     for f in files:
         os.remove(os.path.join(save_dir, f))
@@ -89,7 +84,6 @@ def clean_data():
 
 
 def save_to_excel(data):
-    """Save the collected data to an Excel file."""
     if not data:
         return None
     date_str = datetime.now().strftime("%d %B %H-%M")

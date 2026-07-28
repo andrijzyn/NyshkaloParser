@@ -11,7 +11,6 @@ _console = Console()
 seen_links = set()
 
 def get_element_text(ad, by, value):
-    """Get the text of an element."""
     try:
         return ad.find_element(by, value).text.strip()
     except NoSuchElementException:
@@ -19,7 +18,6 @@ def get_element_text(ad, by, value):
 
 
 def get_element_attr(ad, by, value, attr):
-    """Get an attribute of an element."""
     try:
         return ad.find_element(by, value).get_attribute(attr)
     except NoSuchElementException:
@@ -27,7 +25,6 @@ def get_element_attr(ad, by, value, attr):
 
 
 def parse_listings(parse_driver):
-    """Parse the listings on the current page."""
     ads = parse_driver.find_elements(By.CLASS_NAME, "EntityList-item")
     listings = []
 
@@ -44,7 +41,6 @@ def parse_listings(parse_driver):
 
 
 def collect_data(pages, retry=False):
-    """Collect data from multiple pages."""
     all_data = []
     total_ads = 0
     empty_pages = 0
