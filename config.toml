@@ -6,3 +6,7 @@ min_square = 36
 
 [directories]
 save = "data"
+
+[database]
+dbname = "flats"
+user = "admin"
