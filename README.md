@@ -1,18 +1,22 @@
 That was an interesting task during the hardest period of my life.
 I did not like look for an apartments which suit under my budget and prioritized location.
-And also because the internal Njuškalo filters are garbage.
+And also because the internal "Njuškalo" filters are garbage.
 
-I mainly used Selenium, a Firefox library for automated website testing.
-It closes all antibot windows and scrapes data from the advertisement divs.
-That was a problem for me because it's a bit broken in Njuškalo.
+I mainly used Selenium, a library for automated website testing.
+It closes all anti-bot windows and scrapes data from the advertisement divs.
+That was a problem for me because it's a bit broken in "Njuškalo".
 
 Additional Python libraries clean the data from other advertisements.
-Listings are stored in a PostgreSQL database, deduplicated by URL as each one is parsed.
+Listings are stored in a PostgreSQL database, de-duplicated by URL as each one is parsed.
 
-<img width="850" height="500" alt="image" src="https://github.com/user-attachments/assets/db5a3ef2-a5a2-42b7-ae71-0bf91505b938" />
+<img width="850" height="500" alt="graph" src="https://github.com/user-attachments/assets/c8bdce20-e71c-44ed-934b-b235ca6ed055" />
 
+<img width="850" height="500" alt="diffs" src="https://github.com/user-attachments/assets/dc3aaa61-881c-4a74-b586-2c47e6a3d9c1" />
 
-<img width="850" height="500" alt="image" src="https://github.com/user-attachments/assets/bb6cbd2b-de5e-4353-b29e-e639ac6735e4" />
+<img width="850" height="500" alt="CLI table" src="https://github.com/user-attachments/assets/3e02a85f-e5bd-47c2-a111-e9db2ec27caa" />
+
+<img width="1891" height="1014" alt="DBeaver PostgreSQL table" src="https://github.com/user-attachments/assets/dfbea02c-cdd5-4a9b-b3e5-051e8464ebf7" />
+
 
 
 ---
