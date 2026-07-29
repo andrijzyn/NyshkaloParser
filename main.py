@@ -14,6 +14,7 @@ from selenium.webdriver.firefox.options import Options
 
 
 def make_driver():
+    """Build a headless Firefox webdriver for scraping."""
     options = Options()
     options.add_argument("--headless")
     options.binary_location = '/opt/waterfox/waterfox'
@@ -26,17 +27,32 @@ def parse_args():
     defaults = parser.config["parser"]
     p = argparse.ArgumentParser(description="Njuskalo apartment parser")
     p.add_argument("--iter", action="store_true", help="Retry empty pages before skipping")
-    p.add_argument("--clean", action="store_true", help="Delete all previous listings from the database")
+    p.add_argument(
+        "--clean", action="store_true", help="Delete all previous listings from the database"
+    )
     p.add_argument("--pages", type=int, default=100, help="Max pages to scrape (default: 100)")
-    p.add_argument("--min-price", type=int, default=defaults["min_price"], help="Override min price from config")
-    p.add_argument("--max-price", type=int, default=defaults["max_price"], help="Override max price from config")
-    p.add_argument("--min-square", type=int, default=defaults["min_square"], help="Override min square meters from config")
-    p.add_argument("--max-square", type=int, default=defaults["max_square"], help="Override max square meters from config")
+    p.add_argument(
+        "--min-price", type=int, default=defaults["min_price"],
+        help="Override min price from config",
+    )
+    p.add_argument(
+        "--max-price", type=int, default=defaults["max_price"],
+        help="Override max price from config",
+    )
+    p.add_argument(
+        "--min-square", type=int, default=defaults["min_square"],
+        help="Override min square meters from config",
+    )
+    p.add_argument(
+        "--max-square", type=int, default=defaults["max_square"],
+        help="Override max square meters from config",
+    )
     p.add_argument("--graph", action="store_true", help="Show price distribution chart")
     return p.parse_args()
 
 
 def greetings(console):
+    """Print the startup banner."""
     console.print(Rule("[bold]Njuskalo Apartment Parser[/bold]\n"))
 
 
@@ -70,6 +86,7 @@ def output_table(collected_data, console):
 
 
 def show_price_graph(console):
+    """Print a terminal bar chart of the price distribution across all stored listings."""
     prices = [item["price"] for item in parser.storage.load_full_data() if item["price"]]
 
     if not prices:
@@ -94,6 +111,7 @@ def show_price_graph(console):
 
 
 def main():
+    """Run the scraper end to end: parse args, scrape, print results."""
     flags = parse_args()
     console = Console()
 
@@ -105,7 +123,7 @@ def main():
 
     driver = make_driver()
     on_new_ads = make_ad_printer(console)
-    collected_data, count_ads = parser.scraper.collect_data(
+    collected_data, _count_ads = parser.scraper.collect_data(
         driver, flags.pages, flags, retry=flags.iter, on_new_ads=on_new_ads
     )
     driver.quit()

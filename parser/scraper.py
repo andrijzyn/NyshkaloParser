@@ -10,6 +10,7 @@ _console = Console()
 
 
 def get_element_text(ad, by, value):
+    """Return the stripped text of a child element, or None if it's missing."""
     try:
         return ad.find_element(by, value).text.strip()
     except NoSuchElementException:
@@ -17,6 +18,7 @@ def get_element_text(ad, by, value):
 
 
 def get_element_attr(ad, by, value, attr):
+    """Return an attribute of a child element, or None if it's missing."""
     try:
         return ad.find_element(by, value).get_attribute(attr)
     except NoSuchElementException:
@@ -34,8 +36,9 @@ def parse_listing(parse_driver, known_links):
     for ad in ads:
         price = get_element_text(ad, By.CLASS_NAME, "price")
         link = get_element_attr(ad, By.TAG_NAME, "a", "href")
+        is_listing_link = link and link.startswith("https://www.njuskalo.hr/nekretnine/")
 
-        if not link or not link.startswith("https://www.njuskalo.hr/nekretnine/") or link in known_links:
+        if not is_listing_link or link in known_links:
             continue
 
         known_links.add(link)
@@ -43,6 +46,7 @@ def parse_listing(parse_driver, known_links):
 
 
 def build_search_url(flags, page):
+    """Build the njuskalo.hr search URL for a given page and filter flags."""
     return (
         f"https://www.njuskalo.hr/iznajmljivanje-stanova/zagreb?"
         f"price[min]={flags.min_price}&price[max]={flags.max_price}"
@@ -70,12 +74,15 @@ def fetch_page_data(driver, url, known_links, retry, on_retry=None):
     return data
 
 
-class EmptyPageTracker:
+class EmptyPageTracker:  # pylint: disable=too-few-public-methods
+    """Tracks consecutive pages with no new ads, to know when to stop scraping."""
+
     def __init__(self, limit=2):
         self.limit = limit
         self.count = 0
 
     def record(self, new_ads_count):
+        """Record a page's new-ad count; return True once the limit is reached."""
         if new_ads_count == 0:
             self.count += 1
         else:
@@ -107,8 +114,8 @@ def collect_data(driver, pages, flags, retry=False, on_new_ads=None):
                 url,
                 known_links,
                 retry,
-                on_retry=lambda: progress.update(
-                    task, description=f"[dim]Page {page} empty, retrying...[/dim]"
+                on_retry=lambda p=page: progress.update(
+                    task, description=f"[dim]Page {p} empty, retrying...[/dim]"
                 ),
             )
 

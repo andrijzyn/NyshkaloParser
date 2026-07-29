@@ -1,3 +1,4 @@
+"""Njuskalo apartment listing parser package."""
 import tomllib
 
 with open("config.toml", "rb") as f:

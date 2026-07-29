@@ -1,3 +1,7 @@
+"""PostgreSQL-backed storage for scraped listings."""
+# pylint: disable=no-member
+# astroid can't resolve psycopg3's overloaded Connection.connect() return type,
+# so it infers `conn` as a plain "value" and flags every conn.cursor()/commit() call.
 import re
 from rich.console import Console
 import psycopg
@@ -8,22 +12,27 @@ _console = Console()
 _db = config["database"]
 
 try:
-    conn = psycopg.connect(dbname=_db["dbname"], user=_db["user"])
+    conn: psycopg.Connection = psycopg.connect(dbname=_db["dbname"], user=_db["user"])
 except psycopg.OperationalError as e:
     _console.print(f"[red]✗ Could not connect to PostgreSQL database '{_db['dbname']}': {e}[/red]")
     raise SystemExit(1) from e
 
-with conn.cursor() as cur:
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS listings (
-            id SERIAL PRIMARY KEY,
-            price INTEGER,
-            url TEXT UNIQUE NOT NULL
+
+def _init_schema():
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS listings (
+                id SERIAL PRIMARY KEY,
+                price INTEGER,
+                url TEXT UNIQUE NOT NULL
+            )
+            """
         )
-        """
-    )
-conn.commit()
+    conn.commit()
+
+
+_init_schema()
 
 
 def extract_price(price):
@@ -52,12 +61,14 @@ def load_previous_data():
 
 
 def load_full_data():
+    """Returns every stored listing as {"price": int|None, "link": str}, cheapest first."""
     with conn.cursor() as cur:
         cur.execute("SELECT price, url FROM listings ORDER BY price NULLS LAST")
         return [{"price": price, "link": url} for price, url in cur.fetchall()]
 
 
 def clean_data():
+    """Deletes all stored listings; returns how many rows were removed."""
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM listings")
         count = cur.fetchone()[0]
