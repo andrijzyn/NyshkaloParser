@@ -38,7 +38,11 @@ def parse_listing(parse_driver, known_links):
         link = get_element_attr(ad, By.TAG_NAME, "a", "href")
         is_listing_link = link and link.startswith("https://www.njuskalo.hr/nekretnine/")
 
-        if not is_listing_link or link in known_links:
+        if not is_listing_link:
+            continue
+
+        if link in known_links:
+            _console.print(f"    [dim]Passed[/dim]  [cyan]{link}[/cyan]")
             continue
 
         known_links.add(link)
