@@ -1,9 +1,5 @@
-"""Njuskalo apartment scraper package — initialises browser and config."""
+"""Njuskalo apartment listing parser package."""
 import tomllib
-from . import driver
-
-driver = driver.initiate()
-driver.get("https://www.njuskalo.hr/")
 
 with open("config.toml", "rb") as f:
     config = tomllib.load(f)

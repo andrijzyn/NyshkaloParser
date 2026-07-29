@@ -4,14 +4,13 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from . import config, driver, storage
+from . import storage
 
 _console = Console()
 
-seen_links = set()
 
 def get_element_text(ad, by, value):
-    """Get the text of an element."""
+    """Return the stripped text of a child element, or None if it's missing."""
     try:
         return ad.find_element(by, value).text.strip()
     except NoSuchElementException:
@@ -19,36 +18,84 @@ def get_element_text(ad, by, value):
 
 
 def get_element_attr(ad, by, value, attr):
-    """Get an attribute of an element."""
+    """Return an attribute of a child element, or None if it's missing."""
     try:
         return ad.find_element(by, value).get_attribute(attr)
     except NoSuchElementException:
         return None
 
 
-def parse_listings(parse_driver):
-    """Parse the listings on the current page."""
+def parse_listing(parse_driver, known_links):
+    """
+    Generator: checks and filters each listing right after it's parsed,
+    instead of as a batch after the whole page is done. known_links is a
+    shared set (previously saved urls + everything found this run),
+    mutated in place here.
+    """
     ads = parse_driver.find_elements(By.CLASS_NAME, "EntityList-item")
-    listings = []
-
-    if not ads:
-        return listings, 0
     for ad in ads:
         price = get_element_text(ad, By.CLASS_NAME, "price")
         link = get_element_attr(ad, By.TAG_NAME, "a", "href")
-        if not link or not link.startswith("https://www.njuskalo.hr/nekretnine/") or link in seen_links:
+        is_listing_link = link and link.startswith("https://www.njuskalo.hr/nekretnine/")
+
+        if not is_listing_link or link in known_links:
             continue
-        seen_links.add(link)
-        listings.append({"price": price, "link": link})
-    return listings, len(listings)
+
+        known_links.add(link)
+        yield {"price": price, "link": link}
 
 
-def collect_data(pages, retry=False):
-    """Collect data from multiple pages."""
+def build_search_url(flags, page):
+    """Build the njuskalo.hr search URL for a given page and filter flags."""
+    return (
+        f"https://www.njuskalo.hr/iznajmljivanje-stanova/zagreb?"
+        f"price[min]={flags.min_price}&price[max]={flags.max_price}"
+        f"&livingArea[min]={flags.min_square}&livingArea[max]={flags.max_square}"
+        f"&page={page}"
+    )
+
+
+def fetch_page_data(driver, url, known_links, retry, on_retry=None):
+    """
+    driver is passed in explicitly — scraper.py shouldn't need to know
+    where it comes from (Chrome/Firefox, headless or not, which binary) —
+    that's main.py's responsibility.
+    """
+    driver.get(url)
+    data = list(parse_listing(driver, known_links))
+
+    if not data and retry:
+        if on_retry:
+            on_retry()
+        time.sleep(2)
+        driver.get(url)
+        data = list(parse_listing(driver, known_links))
+
+    return data
+
+
+class EmptyPageTracker:  # pylint: disable=too-few-public-methods
+    """Tracks consecutive pages with no new ads, to know when to stop scraping."""
+
+    def __init__(self, limit=2):
+        self.limit = limit
+        self.count = 0
+
+    def record(self, new_ads_count):
+        """Record a page's new-ad count; return True once the limit is reached."""
+        if new_ads_count == 0:
+            self.count += 1
+        else:
+            self.count = 0
+        return self.count >= self.limit
+
+
+def collect_data(driver, pages, flags, retry=False, on_new_ads=None):
+    """MAIN ENTRY POINT — called from main.py, driver is passed in explicitly."""
     all_data = []
     total_ads = 0
-    empty_pages = 0
-    previous_links = storage.load_previous_data()
+    known_links = storage.load_previous_data()
+    empty_tracker = EmptyPageTracker(limit=2)
 
     with Progress(
         SpinnerColumn(),
@@ -57,40 +104,32 @@ def collect_data(pages, retry=False):
         transient=True,
     ) as progress:
         task = progress.add_task("[dim]Starting...[/dim]", total=None)
+
         for page in range(1, pages):
             progress.update(task, description=f"[dim]Scraping page {page}...[/dim]")
-            min_price = config["parser"]["min_price"]
-            max_price = config["parser"]["max_price"]
-            min_square = config["parser"]["min_square"]
-            max_square = config["parser"]["max_square"]
-            url = (
-                f"https://www.njuskalo.hr/iznajmljivanje-stanova/zagreb?"
-                f"price[min]={min_price}&price[max]={max_price}"
-                f"&livingArea[min]={min_square}&livingArea[max]={max_square}"
-                f"&page={page}"
+
+            url = build_search_url(flags, page)
+            new_ads = fetch_page_data(
+                driver,
+                url,
+                known_links,
+                retry,
+                on_retry=lambda p=page: progress.update(
+                    task, description=f"[dim]Page {p} empty, retrying...[/dim]"
+                ),
             )
-            driver.get(url)
-            data, _ = parse_listings(driver)
-            if not data and retry:
-                progress.update(task, description=f"[dim]Page {page} empty, retrying...[/dim]")
-                time.sleep(2)
-                driver.get(url)
-                data, _ = parse_listings(driver)
-            if not data:
-                empty_pages += 1
-                if empty_pages >= 2:
-                    break
-                continue
-            unique_data = [ad for ad in data if ad["link"] not in previous_links]
-            unique_count = len(unique_data)
-            all_data.extend(unique_data)
-            _console.print(f"  Page [bold]{page}[/bold]  [green]+{unique_count}[/green] new")
-            total_ads += unique_count
-            if unique_count == 0:
-                empty_pages += 1
-                if empty_pages >= 2:
-                    break
-            else:
-                empty_pages = 0
+
+            if new_ads:
+                storage.save_listings(new_ads)
+                if on_new_ads:
+                    on_new_ads(new_ads)
+
+            all_data.extend(new_ads)
+            total_ads += len(new_ads)
+
+            _console.print(f"  Page [bold]{page}[/bold]  [green]+{len(new_ads)}[/green] new")
+
+            if empty_tracker.record(len(new_ads)):
+                break
 
     return all_data, total_ads
