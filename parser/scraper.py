@@ -42,12 +42,37 @@ def get_element_attr(ad, by, value, attr):
         return None
 
 
-def parse_listing(ctx, known_links):
+class LinkTracker:
+    """
+    Tracks listing URLs seen across a run (previously saved + everything found so far)
+    and reports each duplicate's 'Passed' line at most once — some listings (e.g. a
+    site-pinned featured ad) reappear on every page, and re-logging them every time is
+    just noise once we already know about them.
+    """
+
+    def __init__(self, known_links):
+        self.known = known_links
+        self._reported = set()
+
+    def is_new(self, link):
+        """True and records the link if it hasn't been seen before; False otherwise."""
+        if link in self.known:
+            return False
+        self.known.add(link)
+        return True
+
+    def should_report_passed(self, link):
+        """True the first time this duplicate link is seen in the run; False after that."""
+        if link in self._reported:
+            return False
+        self._reported.add(link)
+        return True
+
+
+def parse_listing(ctx, links):
     """
     Generator: checks and filters each listing right after it's parsed,
-    instead of as a batch after the whole page is done. known_links is a
-    shared set (previously saved urls + everything found this run),
-    mutated in place here.
+    instead of as a batch after the whole page is done.
     """
     site = ctx.settings.site
     ads = ctx.driver.find_elements(By.CLASS_NAME, site.listing_class)
@@ -59,11 +84,11 @@ def parse_listing(ctx, known_links):
         if not is_listing_link:
             continue
 
-        if link in known_links:
-            ctx.console.print(f"    [dim]Passed[/dim]  [cyan]{link}[/cyan]")
+        if not links.is_new(link):
+            if links.should_report_passed(link):
+                ctx.console.print(f"    [dim]Passed[/dim]  [cyan]{link}[/cyan]")
             continue
 
-        known_links.add(link)
         yield {"price": price, "link": link}
 
 
@@ -78,18 +103,18 @@ def build_search_url(flags, page, settings):
     )
 
 
-def fetch_page_data(ctx, url, known_links, retry, on_retry=None):
+def fetch_page_data(ctx, url, links, retry, on_retry=None):
     """ctx.driver is passed in explicitly — scraper.py shouldn't need to know where it
     comes from (Chrome/Firefox, headless or not, which binary) — that's main.py's job."""
     ctx.driver.get(url)
-    data = list(parse_listing(ctx, known_links))
+    data = list(parse_listing(ctx, links))
 
     if not data and retry:
         if on_retry:
             on_retry()
         time.sleep(ctx.settings.scraping.retry_sleep_seconds)
         ctx.driver.get(url)
-        data = list(parse_listing(ctx, known_links))
+        data = list(parse_listing(ctx, links))
 
     return data
 
@@ -115,7 +140,7 @@ def collect_data(ctx, flags, retry=False, on_new_ads=None):
     storage, settings, and the shared console."""
     all_data = []
     total_ads = 0
-    known_links = ctx.storage.load_previous_data()
+    links = LinkTracker(ctx.storage.load_previous_data())
     empty_tracker = EmptyPageTracker(limit=ctx.settings.scraping.empty_page_limit)
 
     with Progress(
@@ -133,7 +158,7 @@ def collect_data(ctx, flags, retry=False, on_new_ads=None):
             new_ads = fetch_page_data(
                 ctx,
                 url,
-                known_links,
+                links,
                 retry,
                 on_retry=lambda p=page: progress.update(
                     task, description=f"[dim]Page {p} empty, retrying...[/dim]"
