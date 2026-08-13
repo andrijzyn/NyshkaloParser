@@ -3,6 +3,7 @@ import argparse
 
 import parser
 import parser.scraper
+from parser.scraper import ScrapeContext
 from parser.storage import Storage
 import plotext as plt
 from rich.console import Console
@@ -130,9 +131,10 @@ def main():
         console.print(f"[dim]Removed - {removed} previous listings[/dim]\n")
 
     driver = make_driver(settings)
+    ctx = ScrapeContext(driver=driver, storage=storage, settings=settings, console=console)
     on_new_ads = make_ad_printer(console)
     collected_data, _count_ads = parser.scraper.collect_data(
-        driver, storage, flags, settings, console, retry=flags.iter, on_new_ads=on_new_ads
+        ctx, flags, retry=flags.iter, on_new_ads=on_new_ads
     )
     driver.quit()
 
