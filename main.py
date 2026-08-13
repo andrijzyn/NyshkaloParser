@@ -3,7 +3,7 @@ import argparse
 
 import parser
 import parser.scraper
-import parser.storage
+from parser.storage import Storage
 import plotext as plt
 from rich.console import Console
 from rich.rule import Rule
@@ -13,39 +13,42 @@ from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 
 
-def make_driver():
+def make_driver(settings):
     """Build a headless Firefox webdriver for scraping."""
-    driver_config = parser.config["driver"]
     options = Options()
-    options.add_argument("--headless")
-    options.binary_location = driver_config["firefox_binary"]
-    service = Service(driver_config["geckodriver"])
+    if settings.scraping.headless:
+        options.add_argument("--headless")
+    options.binary_location = settings.driver.firefox_binary
+    service = Service(settings.driver.geckodriver)
     return webdriver.Firefox(service=service, options=options)
 
 
-def parse_args():
+def parse_args(settings):
     """Parse and return CLI arguments."""
-    defaults = parser.config["parser"]
+    defaults = settings.parser
     p = argparse.ArgumentParser(description="Njuskalo apartment parser")
     p.add_argument("--iter", action="store_true", help="Retry empty pages before skipping")
     p.add_argument(
         "--clean", action="store_true", help="Delete all previous listings from the database"
     )
-    p.add_argument("--pages", type=int, default=100, help="Max pages to scrape (default: 100)")
     p.add_argument(
-        "--min-price", type=int, default=defaults["min_price"],
+        "--pages", type=int, default=defaults.pages,
+        help="Max pages to scrape (default: from config)",
+    )
+    p.add_argument(
+        "--min-price", type=int, default=defaults.min_price,
         help="Override min price from config",
     )
     p.add_argument(
-        "--max-price", type=int, default=defaults["max_price"],
+        "--max-price", type=int, default=defaults.max_price,
         help="Override max price from config",
     )
     p.add_argument(
-        "--min-square", type=int, default=defaults["min_square"],
+        "--min-square", type=int, default=defaults.min_square,
         help="Override min square meters from config",
     )
     p.add_argument(
-        "--max-square", type=int, default=defaults["max_square"],
+        "--max-square", type=int, default=defaults.max_square,
         help="Override max square meters from config",
     )
     p.add_argument("--graph", action="store_true", help="Show price distribution chart")
@@ -86,24 +89,25 @@ def output_table(collected_data, console):
         console.print()
 
 
-def show_price_graph(console):
+def show_price_graph(console, storage, settings):
     """Print a terminal bar chart of the price distribution across all stored listings."""
-    prices = [item["price"] for item in parser.storage.load_full_data() if item["price"]]
+    prices = [item["price"] for item in storage.load_full_data() if item["price"]]
 
     if not prices:
         return
 
-    bucket_start = (min(prices) // 100) * 100
-    bucket_end = ((max(prices) // 100) + 1) * 100
+    width = settings.report.price_bucket_width
+    bucket_start = (min(prices) // width) * width
+    bucket_end = ((max(prices) // width) + 1) * width
     x_values, counts = [], []
-    for start in range(bucket_start, bucket_end, 100):
-        x_values.append(start + 50)
-        counts.append(sum(1 for p in prices if start <= p < start + 100))
+    for start in range(bucket_start, bucket_end, width):
+        x_values.append(start + width // 2)
+        counts.append(sum(1 for p in prices if start <= p < start + width))
 
     console.print()
     plt.clf()
     plt.plot(x_values, counts, marker="braille")
-    plt.title("Price distribution per 100€")
+    plt.title(f"Price distribution per {width}€")
     plt.ylabel("Price range (€)")
     plt.xlabel("Listings")
     print(plt.build())
@@ -113,26 +117,29 @@ def show_price_graph(console):
 
 def main():
     """Run the scraper end to end: parse args, scrape, print results."""
-    flags = parse_args()
+    settings = parser.load_settings()
+    flags = parse_args(settings)
     console = Console()
 
     greetings(console)
 
+    storage = Storage(settings.database)
+
     if flags.clean:
-        removed = parser.storage.clean_data()
+        removed = storage.clean_data()
         console.print(f"[dim]Removed - {removed} previous listings[/dim]\n")
 
-    driver = make_driver()
+    driver = make_driver(settings)
     on_new_ads = make_ad_printer(console)
     collected_data, _count_ads = parser.scraper.collect_data(
-        driver, flags.pages, flags, retry=flags.iter, on_new_ads=on_new_ads
+        driver, storage, flags, settings, console, retry=flags.iter, on_new_ads=on_new_ads
     )
     driver.quit()
 
     output_table(collected_data, console)
 
     if flags.graph:
-        show_price_graph(console)
+        show_price_graph(console, storage, settings)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,32 @@
+[parser]
+min_price = 200   # minimum rent (€)
+max_price = 400   # maximum rent (€)
+max_square = 45   # maximum area (m²)
+min_square = 36   # minimum area (m²)
+pages = 100        # default max pages to scrape
+
+[site]
+base_url = "https://www.njuskalo.hr"
+city = "zagreb"
+listing_class = "EntityList-item"
+price_class = "price"
+
+[scraping]
+headless = true
+retry_sleep_seconds = 2
+empty_page_limit = 2
+
+[driver]
+firefox_binary = "/usr/bin/firefox"
+geckodriver = "/usr/bin/geckodriver"
+
+[database]
+dbname = "flats"
+user = "admin"
+host = "localhost"
+port = 5432
+password = "changeme"
+table = "listings"
+
+[report]
+price_bucket_width = 100

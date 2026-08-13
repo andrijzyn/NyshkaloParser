@@ -1,5 +1,4 @@
 """Njuskalo apartment listing parser package."""
-import tomllib
+from .config import Settings, load_settings
 
-with open("config.toml", "rb") as f:
-    config = tomllib.load(f)
+__all__ = ["Settings", "load_settings"]

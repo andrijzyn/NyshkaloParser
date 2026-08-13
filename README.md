@@ -27,13 +27,17 @@ Listings are stored in a PostgreSQL database, de-duplicated by URL as each one i
 pip install -r requirements.txt
 ```
 
-Requires a running PostgreSQL server. Create the database (the `listings` table is created automatically on first run):
+Requires a running PostgreSQL server. Create the database (the listings table is created automatically on first run):
 
 ```bash
 createdb flats
 ```
 
-Configure search parameters and the database connection in `config.toml`:
+Copy the example config and fill in your own values — `config.toml` is gitignored, so your local paths/credentials never get committed:
+
+```bash
+cp config.example.toml config.toml
+```
 
 ```toml
 [parser]
@@ -41,16 +45,34 @@ min_price = 200   # minimum rent (€)
 max_price = 400   # maximum rent (€)
 max_square = 45   # maximum area (m²)
 min_square = 36   # minimum area (m²)
+pages = 100        # default max pages to scrape (overridable with --pages)
 
-[directories]
-save = "data"     # output folder
+[site]
+base_url = "https://www.njuskalo.hr"
+city = "zagreb"
+listing_class = "EntityList-item"   # CSS class of a listing card
+price_class = "price"               # CSS class of the price element
+
+[scraping]
+headless = true
+retry_sleep_seconds = 2   # delay before retrying an empty page (with --iter)
+empty_page_limit = 2      # stop after this many consecutive empty pages
+
+[driver]
+firefox_binary = "/usr/bin/firefox"
+geckodriver = "/usr/bin/geckodriver"
 
 [database]
 dbname = "flats"
-user = "admin"    # must have access to connect + create/use the listings table
-```
+user = "admin"        # must have access to connect + create/use the listings table
+host = "localhost"
+port = 5432
+password = ""          # leave blank to use local trust/peer authentication
+table = "listings"
 
-The connection relies on local trust/peer authentication (unix socket, no password). For a remote/password-protected server, set standard `PGHOST`/`PGPASSWORD` environment variables — `psycopg` picks them up automatically.
+[report]
+price_bucket_width = 100   # €-width of each bucket in the --graph chart
+```
 
 ## Usage
 
