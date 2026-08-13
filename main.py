@@ -15,10 +15,11 @@ from selenium.webdriver.firefox.options import Options
 
 def make_driver():
     """Build a headless Firefox webdriver for scraping."""
+    driver_config = parser.config["driver"]
     options = Options()
     options.add_argument("--headless")
-    options.binary_location = '/opt/waterfox/waterfox'
-    service = Service('/usr/bin/geckodriver')
+    options.binary_location = driver_config["firefox_binary"]
+    service = Service(driver_config["geckodriver"])
     return webdriver.Firefox(service=service, options=options)
 
 
