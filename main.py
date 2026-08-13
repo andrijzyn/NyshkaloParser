@@ -131,12 +131,14 @@ def main():
         console.print(f"[dim]Removed - {removed} previous listings[/dim]\n")
 
     driver = make_driver(settings)
-    ctx = ScrapeContext(driver=driver, storage=storage, settings=settings, console=console)
-    on_new_ads = make_ad_printer(console)
-    collected_data, _count_ads = parser.scraper.collect_data(
-        ctx, flags, retry=flags.iter, on_new_ads=on_new_ads
-    )
-    driver.quit()
+    try:
+        ctx = ScrapeContext(driver=driver, storage=storage, settings=settings, console=console)
+        on_new_ads = make_ad_printer(console)
+        collected_data, _count_ads = parser.scraper.collect_data(
+            ctx, flags, retry=flags.iter, on_new_ads=on_new_ads
+        )
+    finally:
+        driver.quit()
 
     output_table(collected_data, console)
 
@@ -145,4 +147,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nExecution was interrupted. Founded listings are already saved :D")
+        raise SystemExit(130) from None
